@@ -6,16 +6,21 @@ PDFJS.workerSrc = "//mozilla.github.io/pdf.js/build/pdf.worker.js";
 module.exports = function(robot) {
   robot.respond(/was gibts/i, function(res) {
     let food = run();
-    const test = food.then(
+    res.reply("Okay ich schaue mal nach :)");
+
+    res.reply({ type: "typing" });
+
+    const dishes = food.then(
       dishes => {
         res.reply(dishes);
+        resetVariables();
       },
       function(reason) {
         console.log(reason);
         // rejection
       }
     );
-    return res.reply(test);
+    return res.reply(dishes);
   });
 };
 
@@ -42,7 +47,29 @@ var formatedDishes = {
   saturday: [],
   sunday: []
 };
-
+function resetVariables() {
+  formatedDishes = {
+    monday: [],
+    tuesday: [],
+    wednesday: [],
+    thursday: [],
+    friday: [],
+    saturday: [],
+    sunday: []
+  };
+  diningPlan = {
+    period: "",
+    dishes: {
+      monday: [],
+      tuesday: [],
+      wednesday: [],
+      thursday: [],
+      friday: [],
+      saturday: [],
+      sunday: []
+    }
+  };
+}
 // Disable workers to avoid yet another cross-origin issue (workers need
 // the URL of the script to be loaded, and dynamically loading a cross-origin
 // script does not work).
