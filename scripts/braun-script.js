@@ -1,12 +1,10 @@
 const PDFJS = require("pdfjs-dist");
 const request = require("request");
 const cheerio = require("cheerio");
+PDFJS.workerSrc = "//mozilla.github.io/pdf.js/build/pdf.worker.js";
 
-// If absolute URL from the remote server is provided, configure the CORS
-// header on that server.
+module.exports.defaultReply = defaultReply;
 
-var url =
-  "https://www.braun-moebel.de/uploads/contentblocks/download/1512713856.3497-120524.pdf";
 var diningPlan = {
   period: "",
   dishes: {
@@ -19,6 +17,7 @@ var diningPlan = {
     sunday: []
   }
 };
+
 var formatedDishes = {
   monday: [],
   tuesday: [],
@@ -29,13 +28,30 @@ var formatedDishes = {
   sunday: []
 };
 
-// Disable workers to avoid yet another cross-origin issue (workers need
-// the URL of the script to be loaded, and dynamically loading a cross-origin
-// script does not work).
-// PDFJS.disableWorker = true;
+function resetVariables() {
+  formatedDishes = {
+    monday: [],
+    tuesday: [],
+    wednesday: [],
+    thursday: [],
+    friday: [],
+    saturday: [],
+    sunday: []
+  };
+  diningPlan = {
+    period: "",
+    dishes: {
+      monday: [],
+      tuesday: [],
+      wednesday: [],
+      thursday: [],
+      friday: [],
+      saturday: [],
+      sunday: []
+    }
+  };
+}
 
-// The workerSrc property shall be specified.
-PDFJS.workerSrc = "//mozilla.github.io/pdf.js/build/pdf.worker.js";
 function doRequest(url) {
   return new Promise(function(resolve, reject) {
     request(url, function(error, res, body) {
@@ -85,11 +101,9 @@ const loadAndParsePDF = async url => {
         pages.map(function(pageNumber) {
           return pdf.getPage(pageNumber + 1).then(function(page) {
             return page.getTextContent().then(function(textContent) {
-              let testCounter = 3;
               return textContent.items
                 .map(function(item) {
                   if (isDate(item.str)) {
-                    testCounter = 0;
                     currentDay = parseDate(item.str).getDay();
                   } else {
                     switch (currentDay) {
@@ -119,7 +133,6 @@ const loadAndParsePDF = async url => {
                       default:
                         break;
                     }
-                    testCounter++;
 
                     return item.str;
                   }
@@ -162,9 +175,9 @@ function formateDishes() {
     let singleDish = "";
     let dayDishes = [];
     diningPlan.dishes[day].map((partDishString, index) => {
-      if (partDishString !== "€") {
+      if (!partDishString.includes("€")) {
         singleDish += ` ${partDishString}`;
-      } else if (partDishString === "€") {
+      } else {
         singleDish += ` ${partDishString}`;
         dayDishes.push(singleDish);
         singleDish = "";
@@ -174,26 +187,78 @@ function formateDishes() {
   });
 }
 
-function generateMarkdown() {
+function generateMarkdown(day) {
+  const currentDate = new Date();
+
   let markDown = "";
-  Object.keys(formatedDishes).forEach((day, index) => {
+  if (day) {
     markDown += `
-    *${day}*
+    *$Heute (${currentDate.toDateString()}) gibt es folgende Gerichte:*
     `;
     formatedDishes[day].map(dish => {
       markDown += `
       ${dish}
       `;
     });
-  });
+  } else {
+    Object.keys(formatedDishes).forEach((day, index) => {
+      markDown += `
+    *${day}*
+    `;
+      formatedDishes[day].map(dish => {
+        markDown += `
+      ${dish}
+      `;
+      });
+    });
+  }
   return markDown;
 }
+// currentDay 0-6
+function getOppeningBraunDay(currentDay) {
+  // return null on sunday since Braun is not open on sundays
+  if (currentDay === 0) {
+    return null;
+  } else if (currentDay > 0 && currentDay <= 6) {
+    const weekday = [];
+    weekday[0] = "sunday";
+    weekday[1] = "monday";
+    weekday[2] = "tuesday";
+    weekday[3] = "wednesday";
+    weekday[4] = "thursday";
+    weekday[5] = "friday";
+    weekday[6] = "saturday";
+    return weekday[currentDay];
+  } else {
+    return null;
+  }
+}
+function defaultReply(res) {
+  const currentDate = new Date();
+  const currentDay = currentDate.getDay();
+  const braunOppenedWeekday = getOppeningBraunDay(currentDay);
+  if (braunOppenedWeekday) {
+    let food = run(braunOppenedWeekday);
+    res.reply("🌭🌮🌯 Okay ich schaue mal nach :) 🌭🌮🌯");
 
-async function run() {
+    const dishes = food.then(
+      dishes => {
+        res.reply(dishes);
+        resetVariables();
+      },
+      function(reason) {
+        res.reply(`🙈 Sorry da ist etwas schief gelaufen.`);
+        // rejection
+      }
+    );
+  } else {
+    res.reply(`🔒 Die Braun-Kantine hat heute geschlossen. 🔒`);
+  }
+}
+async function run(braunOppenedWeekday) {
   const flyerURL = await extractURL();
   const test = await loadAndParsePDF(`https://www.braun-moebel.de${flyerURL}`);
   formateDishes();
-  console.log(generateMarkdown());
-  return formatedDishes;
+  const markdownDishes = generateMarkdown(braunOppenedWeekday);
+  return markdownDishes;
 }
-run();
